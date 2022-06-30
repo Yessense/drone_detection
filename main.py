@@ -3,12 +3,16 @@ import os
 import cv2
 import numpy as np
 
+from cv_bridge import CvBridge
+import rospy
+from sensor_msgs.msg import Image
+
 # Constants.
 INPUT_WIDTH = 320
 INPUT_HEIGHT = 320
 SCORE_THRESHOLD = 0.5
 NMS_THRESHOLD = 0.1
-CONFIDENCE_THRESHOLD = 0.6
+CONFIDENCE_THRESHOLD = 0.4
 
 # Text parameters.
 FONT_FACE = cv2.FONT_HERSHEY_SIMPLEX
@@ -20,6 +24,12 @@ BLACK = (0, 0, 0)
 BLUE = (255, 178, 50)
 YELLOW = (0, 255, 255)
 
+ros_image = None
+bridge = CvBridge()
+
+def callback(message):
+    global ros_image
+    ros_image = cv2.cvtColor(bridge.imgmsg_to_cv2(message, desired_encoding='passthrough'), cv2.COLOR_BGR2RGB)
 
 def draw_label(im, label, x, y):
     """Draw text onto image at location."""
@@ -101,10 +111,19 @@ def post_process(input_image, outputs, draw=False):
 
 
 if __name__ == '__main__':
+    rospy.init_node("drone_detection")
     draw = True
+    
+    # capture = cv2.VideoCapture(0)
+    bridge = CvBridge()
+    # capture.set(3, 640)
+    # capture.set(4, 480)
+    topic = rospy.Publisher("camera/color/drone_detection", Image, queue_size=10)
+    rospy.Subscriber("/camera/color/image_raw", Image, callback)
 
     modelWeights = "weights.onnx"
     net = cv2.dnn.readNet(modelWeights)
+    print("Net initialized")
 
     # Load class names.
     classesFile = "classes.txt"
@@ -112,15 +131,22 @@ if __name__ == '__main__':
         classes = f.read().rstrip('\n').split('\n')
 
     images_dir = './test/images/'
-    for image in os.listdir(images_dir):
-        image_path = os.path.join(images_dir, image)
+    # for image in os.listdir(images_dir):
+    while True:
+        # image_path = os.path.join(images_dir, image)
         # Load image.
-        frame = cv2.imread(image_path)
+        # frame = cv2.imread(image_path)
+        # success, frame = capture.read()
+        frame = ros_image
+        if frame is None:
+            print("NULL FRAME")
+            continue
+        print("New frame")
         # Give the weight files to the model and load the network using       them.
         # Process image.
         detections = pre_process(frame, net)
-
         img, boxes, confidences = post_process(frame.copy(), detections, draw=draw)
+        print(boxes)
         """
         Put efficiency information. The function getPerfProfile returns       the overall time for inference(t)
         and the timings for each of the layers(in layersTimes).
@@ -129,6 +155,10 @@ if __name__ == '__main__':
         label = 'Inference time: %.2f ms' % (t * 1000.0 / cv2.getTickFrequency())
 
         if img is not None:
-            # cv2.putText(img, label, (20, 40), FONT_FACE, FONT_SCALE,  (0, 0, 255), THICKNESS, cv2.LINE_AA)
-            cv2.imshow('Output', img)
+            print("IMG IS NOT NONE")
+            cv2.putText(img, label, (20, 40), FONT_FACE, FONT_SCALE,  (0, 0, 255), THICKNESS, cv2.LINE_AA)
+            # cv2.imshow('Output', img)
+            image_message = bridge.cv2_to_imgmsg(img, encoding="bgr8")
+            topic.publish(image_message)
+            
             cv2.waitKey(300)
