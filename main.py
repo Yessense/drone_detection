@@ -148,7 +148,7 @@ if __name__ == '__main__':
         img, boxes, confidences = post_process(frame.copy(), detections, draw=draw)
         print(boxes)
         """
-        Put efficiency information. The function getPerfProfile returns       the overall time for inference(t)
+        Put efficiency information. The function getPerfProfile returns       the overall time for results(t)
         and the timings for each of the layers(in layersTimes).
         """
         t, _ = net.getPerfProfile()
